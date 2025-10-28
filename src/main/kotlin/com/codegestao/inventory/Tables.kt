@@ -1,4 +1,3 @@
-
 package com.codegestao.inventory
 
 import org.jetbrains.exposed.sql.Table
@@ -14,7 +13,7 @@ object Sessions : Table("sessions") {
 
 object SessionItems : Table("session_items") {
     val id = uuid("id").uniqueIndex()
-    val sessionId = uuid("session_id").references(Sessions.id)
+    val sessionId = uuid("session_id").index() // referência simples (sem EntityID)
     val code = varchar("code", 128)
     val barcode = varchar("barcode", 128).nullable()
     val sku = varchar("sku", 128).nullable()
@@ -24,5 +23,6 @@ object SessionItems : Table("session_items") {
     val idempotencyKey = varchar("idempotency_key", 256).nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
+
     override val primaryKey = PrimaryKey(id)
 }
