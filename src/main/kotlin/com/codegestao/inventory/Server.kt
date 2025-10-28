@@ -13,6 +13,8 @@ import io.ktor.server.response.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 fun main() {
     Db.connectAndMigrate()
@@ -32,13 +34,13 @@ fun Application.module() {
             post("/sessions") {
                 val req = call.receive<CreateSessionRequest>()
                 val id = UUID.randomUUID()
-                val createdAt = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)
+                val createdAt = LocalDateTime.now(ZoneOffset.UTC)
                 transaction {
-                    Sessions.insert {
-                        it[Sessions.id] = id
-                        it[Sessions.name] = req.name
-                        it[Sessions.createdAt] = createdAt
-                        it[Sessions.status] = "OPEN"
+                    Sessions.insert { row ->
+                        row[Sessions.id] = id
+                        row[Sessions.name] = req.name
+                        row[Sessions.createdAt] = createdAt
+                        row[Sessions.status] = "OPEN"
                     }
                 }
                 call.respond(mapOf("id" to id.toString(), "name" to req.name, "createdAt" to createdAt.toString(), "status" to "OPEN"))
@@ -47,7 +49,7 @@ fun Application.module() {
             post("/sessions/{id}/items") {
                 val sessionId = UUID.fromString(call.parameters["id"] ?: error("session id required"))
                 val req = call.receive<UpsertItemsRequest>()
-                val now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC)
+                val now = LocalDateTime.now(ZoneOffset.UTC)
 
                 transaction {
                     val exists = Sessions.select { Sessions.id eq sessionId }.count() > 0
@@ -62,18 +64,18 @@ fun Application.module() {
                         }.singleOrNull()
 
                         if (existsItem == null) {
-                            SessionItems.insert {
-                                it[id] = UUID.randomUUID()
-                                it[sessionId] = sessionId
-                                it[code] = item.code
-                                it[barcode] = item.barcode
-                                it[sku] = item.sku
-                                it[location] = item.location
-                                it[company] = item.company
-                                it[quantity] = item.quantity
-                                it[idempotencyKey] = item.idempotencyKey
-                                it[createdAt] = now
-                                it[updatedAt] = now
+                            SessionItems.insert { row ->
+                                row[SessionItems.id] = UUID.randomUUID()
+                                row[SessionItems.sessionId] = sessionId
+                                row[SessionItems.code] = item.code
+                                row[SessionItems.barcode] = item.barcode
+                                row[SessionItems.sku] = item.sku
+                                row[SessionItems.location] = item.location
+                                row[SessionItems.company] = item.company
+                                row[SessionItems.quantity] = item.quantity
+                                row[SessionItems.idempotencyKey] = item.idempotencyKey
+                                row[SessionItems.createdAt] = now
+                                row[SessionItems.updatedAt] = now
                             }
                         } else {
                             SessionItems.update({
@@ -81,11 +83,11 @@ fun Application.module() {
                                 (SessionItems.code eq item.code) and
                                 (SessionItems.company eq item.company) and
                                 (SessionItems.location eq item.location)
-                            }) {
-                                it[quantity] = item.quantity
-                                it[barcode] = item.barcode
-                                it[sku] = item.sku
-                                it[updatedAt] = now
+                            }) { row ->
+                                row[SessionItems.quantity] = item.quantity
+                                row[SessionItems.barcode] = item.barcode
+                                row[SessionItems.sku] = item.sku
+                                row[SessionItems.updatedAt] = now
                             }
                         }
                     }
@@ -99,15 +101,15 @@ fun Application.module() {
                     val s = Sessions.select { Sessions.id eq sessionId }.singleOrNull()
                         ?: error("Session not found")
                     val items = SessionItems.select { SessionItems.sessionId eq sessionId }
-                        .map {
+                        .map { r ->
                             ItemResponse(
-                                id = it[SessionItems.id],
-                                code = it[SessionItems.code],
-                                barcode = it[SessionItems.barcode],
-                                sku = it[SessionItems.sku],
-                                location = it[SessionItems.location],
-                                company = it[SessionItems.company],
-                                quantity = it[SessionItems.quantity]
+                                id = r[SessionItems.id],
+                                code = r[SessionItems.code],
+                                barcode = r[SessionItems.barcode],
+                                sku = r[SessionItems.sku],
+                                location = r[SessionItems.location],
+                                company = r[SessionItems.company],
+                                quantity = r[SessionItems.quantity]
                             )
                         }
                     SessionResponse(
