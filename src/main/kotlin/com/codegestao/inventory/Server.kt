@@ -9,6 +9,7 @@ import io.ktor.serialization.jackson.*
 import io.ktor.server.routing.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
+import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -29,15 +30,17 @@ fun Application.module() {
         get("/health") { call.respond(mapOf("status" to "ok")) }
 
         route("/v1") {
+
             // POST /v1/sessions  { "name": "Minha Conferência" }
             post("/sessions") {
                 val req = call.receive<CreateSessionRequest>()
-                val id = UUID.randomUUID()
+                val newId = UUID.randomUUID()
                 val createdAt = LocalDateTime.now(ZoneOffset.UTC)
 
                 transaction {
                     Sessions.insert { stmt ->
-                        stmt[Sessions.id] = id
+                        // Em UUIDTable, o id é EntityID<UUID>
+                        stmt[Sessions.id] = EntityID(newId, Sessions)
                         stmt[Sessions.name] = req.name
                         stmt[Sessions.createdAt] = createdAt
                         stmt[Sessions.status] = "OPEN"
@@ -46,7 +49,7 @@ fun Application.module() {
 
                 call.respond(
                     mapOf(
-                        "id" to id.toString(),
+                        "id" to newId.toString(),
                         "name" to req.name,
                         "createdAt" to createdAt.toString(),
                         "status" to "OPEN"
@@ -61,21 +64,21 @@ fun Application.module() {
                 val now = LocalDateTime.now(ZoneOffset.UTC)
 
                 transaction {
-                    val exists = Sessions.select { Sessions.id eq sessionId }.count() > 0
+                    val exists = Sessions.select { Sessions.id eq EntityID(sessionId, Sessions) }.count() > 0
                     if (!exists) error("Session not found")
 
                     req.items.forEach { item ->
-                        val current = SessionItems.select {
-                            (SessionItems.sessionId eq sessionId) and
-                            (SessionItems.code eq item.code) and
-                            (SessionItems.company eq item.company) and
-                            (SessionItems.location eq item.location)
-                        }.singleOrNull()
+                        val where = (SessionItems.sessionId eq EntityID(sessionId, Sessions)) and
+                                    (SessionItems.code eq item.code) and
+                                    (SessionItems.company eq item.company) and
+                                    (SessionItems.location eq item.location)
+
+                        val current = SessionItems.select { where }.singleOrNull()
 
                         if (current == null) {
                             SessionItems.insert { stmt ->
-                                stmt[SessionItems.id] = UUID.randomUUID()
-                                stmt[SessionItems.sessionId] = sessionId
+                                stmt[SessionItems.id] = EntityID(UUID.randomUUID(), SessionItems)
+                                stmt[SessionItems.sessionId] = EntityID(sessionId, Sessions)
                                 stmt[SessionItems.code] = item.code
                                 stmt[SessionItems.barcode] = item.barcode
                                 stmt[SessionItems.sku] = item.sku
@@ -87,12 +90,7 @@ fun Application.module() {
                                 stmt[SessionItems.updatedAt] = now
                             }
                         } else {
-                            SessionItems.update({
-                                (SessionItems.sessionId eq sessionId) and
-                                (SessionItems.code eq item.code) and
-                                (SessionItems.company eq item.company) and
-                                (SessionItems.location eq item.location)
-                            }) { stmt ->
+                            SessionItems.update({ where }) { stmt ->
                                 stmt[SessionItems.quantity] = item.quantity
                                 stmt[SessionItems.barcode] = item.barcode
                                 stmt[SessionItems.sku] = item.sku
@@ -108,14 +106,15 @@ fun Application.module() {
             // GET /v1/sessions/{id}
             get("/sessions/{id}") {
                 val sessionId = UUID.fromString(call.parameters["id"] ?: error("session id required"))
+
                 val dto = transaction {
-                    val s = Sessions.select { Sessions.id eq sessionId }.singleOrNull()
+                    val s = Sessions.select { Sessions.id eq EntityID(sessionId, Sessions) }.singleOrNull()
                         ?: error("Session not found")
 
-                    val items = SessionItems.select { SessionItems.sessionId eq sessionId }
+                    val items = SessionItems.select { SessionItems.sessionId eq EntityID(sessionId, Sessions) }
                         .map { r ->
                             ItemResponse(
-                                id = r[SessionItems.id],
+                                id = r[SessionItems.id].value,     // EntityID -> UUID
                                 code = r[SessionItems.code],
                                 barcode = r[SessionItems.barcode],
                                 sku = r[SessionItems.sku],
@@ -126,13 +125,14 @@ fun Application.module() {
                         }
 
                     SessionResponse(
-                        id = s[Sessions.id],
+                        id = s[Sessions.id].value,               // EntityID -> UUID
                         name = s[Sessions.name],
                         createdAt = s[Sessions.createdAt].toString(),
                         status = s[Sessions.status],
                         items = items
                     )
                 }
+
                 call.respond(dto)
             }
         }
