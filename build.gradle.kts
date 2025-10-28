@@ -3,6 +3,7 @@ plugins {
     application
     kotlin("jvm") version "1.9.24"
     id("io.ktor.plugin") version "2.3.9"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
     id("org.flywaydb.flyway") version "10.18.2"
 }
 
@@ -10,9 +11,7 @@ application {
     mainClass.set("com.codegestao.inventory.ServerKt")
 }
 
-repositories {
-    mavenCentral()
-}
+repositories { mavenCentral() }
 
 val ktorVersion = "2.3.9"
 val logbackVersion = "1.5.6"
@@ -40,12 +39,13 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-tests-jvm:$ktorVersion")
-    testImplementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    testImplementation("io.ktor:ktor-client-java:$ktorVersion")
 }
 
-tasks.test {
-    useJUnitPlatform()
+tasks.test { useJUnitPlatform() }
+
+tasks.shadowJar {
+    archiveClassifier.set("all")
+    mergeServiceFiles()
 }
 
 flyway {
