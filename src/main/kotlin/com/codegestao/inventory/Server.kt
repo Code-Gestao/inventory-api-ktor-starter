@@ -30,21 +30,18 @@ fun Application.module() {
         get("/health") { call.respond(mapOf("status" to "ok")) }
 
         route("/v1") {
-
-            // POST /v1/sessions  { "name": "Minha Conferência" }
+            // POST /v1/sessions
             post("/sessions") {
                 val req = call.receive<CreateSessionRequest>()
-                val newId = UUID.randomUUID()
                 val createdAt = LocalDateTime.now(ZoneOffset.UTC)
 
-                transaction {
-                    Sessions.insert { stmt ->
-                        // Em UUIDTable, o id é EntityID<UUID>
-                        stmt[Sessions.id] = EntityID(newId, Sessions)
+                // NÃO setar Sessions.id. O UUIDTable gera automaticamente.
+                val newId: UUID = transaction {
+                    Sessions.insertAndGetId { stmt ->
                         stmt[Sessions.name] = req.name
                         stmt[Sessions.createdAt] = createdAt
                         stmt[Sessions.status] = "OPEN"
-                    }
+                    }.value
                 }
 
                 call.respond(
@@ -57,18 +54,19 @@ fun Application.module() {
                 )
             }
 
-            // POST /v1/sessions/{id}/items  { "items": [ ... ] }
-            post("/sessions/{id}/items") {
+            // POST /v1/sessions/{id}/items
+            post("/v1/sessions/{id}/items") {
                 val sessionId = UUID.fromString(call.parameters["id"] ?: error("session id required"))
                 val req = call.receive<UpsertItemsRequest>()
                 val now = LocalDateTime.now(ZoneOffset.UTC)
+                val sessionEid = EntityID(sessionId, Sessions)
 
                 transaction {
-                    val exists = Sessions.select { Sessions.id eq EntityID(sessionId, Sessions) }.count() > 0
+                    val exists = Sessions.select { Sessions.id eq sessionEid }.count() > 0
                     if (!exists) error("Session not found")
 
                     req.items.forEach { item ->
-                        val where = (SessionItems.sessionId eq EntityID(sessionId, Sessions)) and
+                        val where = (SessionItems.sessionId eq sessionEid) and
                                     (SessionItems.code eq item.code) and
                                     (SessionItems.company eq item.company) and
                                     (SessionItems.location eq item.location)
@@ -76,9 +74,9 @@ fun Application.module() {
                         val current = SessionItems.select { where }.singleOrNull()
 
                         if (current == null) {
+                            // NÃO setar SessionItems.id (UUIDTable gera sozinho)
                             SessionItems.insert { stmt ->
-                                stmt[SessionItems.id] = EntityID(UUID.randomUUID(), SessionItems)
-                                stmt[SessionItems.sessionId] = EntityID(sessionId, Sessions)
+                                stmt[SessionItems.sessionId] = sessionEid
                                 stmt[SessionItems.code] = item.code
                                 stmt[SessionItems.barcode] = item.barcode
                                 stmt[SessionItems.sku] = item.sku
@@ -104,17 +102,18 @@ fun Application.module() {
             }
 
             // GET /v1/sessions/{id}
-            get("/sessions/{id}") {
+            get("/v1/sessions/{id}") {
                 val sessionId = UUID.fromString(call.parameters["id"] ?: error("session id required"))
+                val sessionEid = EntityID(sessionId, Sessions)
 
                 val dto = transaction {
-                    val s = Sessions.select { Sessions.id eq EntityID(sessionId, Sessions) }.singleOrNull()
+                    val s = Sessions.select { Sessions.id eq sessionEid }.singleOrNull()
                         ?: error("Session not found")
 
-                    val items = SessionItems.select { SessionItems.sessionId eq EntityID(sessionId, Sessions) }
+                    val items = SessionItems.select { SessionItems.sessionId eq sessionEid }
                         .map { r ->
                             ItemResponse(
-                                id = r[SessionItems.id].value,     // EntityID -> UUID
+                                id = r[SessionItems.id].value,
                                 code = r[SessionItems.code],
                                 barcode = r[SessionItems.barcode],
                                 sku = r[SessionItems.sku],
@@ -125,14 +124,13 @@ fun Application.module() {
                         }
 
                     SessionResponse(
-                        id = s[Sessions.id].value,               // EntityID -> UUID
+                        id = s[Sessions.id].value,
                         name = s[Sessions.name],
                         createdAt = s[Sessions.createdAt].toString(),
                         status = s[Sessions.status],
                         items = items
                     )
                 }
-
                 call.respond(dto)
             }
         }
