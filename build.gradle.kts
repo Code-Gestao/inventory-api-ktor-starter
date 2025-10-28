@@ -21,26 +21,26 @@ val flywayVersion = "10.18.2"
 val postgresDriver = "42.7.4"
 
 dependencies {
-    implementation("io.ktor:ktor-server-core-jvm:$ktorVersion")
-    implementation("io.ktor:ktor-server-netty-jvm:$ktorVersion")
-    implementation("io.ktor:ktor-server-content-negotiation-jvm:$ktorVersion")
-    implementation("io.ktor:ktor-serialization-jackson-jvm:$ktorVersion")
-    implementation("io.ktor:ktor-server-call-logging-jvm:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:$logbackVersion")
+    implementation("io.ktor:ktor-server-core-jvm:2.3.9")
+    implementation("io.ktor:ktor-server-netty-jvm:2.3.9")
+    implementation("io.ktor:ktor-server-content-negotiation-jvm:2.3.9")
+    implementation("io.ktor:ktor-serialization-jackson-jvm:2.3.9")
+    implementation("io.ktor:ktor-server-call-logging-jvm:2.3.9")
+    implementation("ch.qos.logback:logback-classic:1.5.6")
 
-    implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
-    implementation("org.jetbrains.exposed:exposed-java-time:$exposedVersion")
-    implementation("com.zaxxer:HikariCP:$hikariVersion")
-    implementation("org.postgresql:postgresql:$postgresDriver")
+    // EXPOSED — todas as partes e **java-time**
+    implementation("org.jetbrains.exposed:exposed-core:0.51.0")
+    implementation("org.jetbrains.exposed:exposed-dao:0.51.0")
+    implementation("org.jetbrains.exposed:exposed-jdbc:0.51.0")
+    implementation("org.jetbrains.exposed:exposed-java-time:0.51.0")
 
-    implementation("org.flywaydb:flyway-core:$flywayVersion")
-    implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
+    implementation("com.zaxxer:HikariCP:5.1.0")
+    implementation("org.postgresql:postgresql:42.7.4")
 
-    testImplementation(kotlin("test"))
-    testImplementation("io.ktor:ktor-server-tests-jvm:$ktorVersion")
+    implementation("org.flywaydb:flyway-core:10.18.2")
+    implementation("org.flywaydb:flyway-database-postgresql:10.18.2")
 }
+
 
 tasks.test { useJUnitPlatform() }
 
