@@ -1,1 +1,1 @@
-rootProject.name = "inventory-api-ktor"
+rootProject.name = "inventory-api-ktor-starter"
