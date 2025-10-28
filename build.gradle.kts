@@ -39,6 +39,8 @@ dependencies {
 
     implementation("org.flywaydb:flyway-core:10.18.2")
     implementation("org.flywaydb:flyway-database-postgresql:10.18.2")
+    implementation("org.jetbrains.exposed:exposed-core:0.51.0")
+
 }
 
 
