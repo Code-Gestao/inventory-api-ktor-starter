@@ -1,4 +1,3 @@
-
 package com.codegestao.inventory
 
 import io.ktor.server.engine.embeddedServer
@@ -11,10 +10,11 @@ import io.ktor.server.routing.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.util.UUID
 import java.time.LocalDateTime
 import java.time.ZoneOffset
+import java.util.UUID
 
 fun main() {
     Db.connectAndMigrate()
@@ -26,26 +26,35 @@ fun Application.module() {
     install(ContentNegotiation) { jackson() }
 
     routing {
-        get("/health") {
-            call.respond(mapOf("status" to "ok"))
-        }
+        get("/health") { call.respond(mapOf("status" to "ok")) }
 
         route("/v1") {
+            // POST /v1/sessions  { "name": "Minha Conferência" }
             post("/sessions") {
                 val req = call.receive<CreateSessionRequest>()
                 val id = UUID.randomUUID()
                 val createdAt = LocalDateTime.now(ZoneOffset.UTC)
+
                 transaction {
-                    Sessions.insert { row ->
-                        row[Sessions.id] = id
-                        row[Sessions.name] = req.name
-                        row[Sessions.createdAt] = createdAt
-                        row[Sessions.status] = "OPEN"
+                    Sessions.insert { stmt ->
+                        stmt[Sessions.id] = id
+                        stmt[Sessions.name] = req.name
+                        stmt[Sessions.createdAt] = createdAt
+                        stmt[Sessions.status] = "OPEN"
                     }
                 }
-                call.respond(mapOf("id" to id.toString(), "name" to req.name, "createdAt" to createdAt.toString(), "status" to "OPEN"))
+
+                call.respond(
+                    mapOf(
+                        "id" to id.toString(),
+                        "name" to req.name,
+                        "createdAt" to createdAt.toString(),
+                        "status" to "OPEN"
+                    )
+                )
             }
 
+            // POST /v1/sessions/{id}/items  { "items": [ ... ] }
             post("/sessions/{id}/items") {
                 val sessionId = UUID.fromString(call.parameters["id"] ?: error("session id required"))
                 val req = call.receive<UpsertItemsRequest>()
@@ -56,26 +65,26 @@ fun Application.module() {
                     if (!exists) error("Session not found")
 
                     req.items.forEach { item ->
-                        val existsItem = SessionItems.select {
+                        val current = SessionItems.select {
                             (SessionItems.sessionId eq sessionId) and
                             (SessionItems.code eq item.code) and
                             (SessionItems.company eq item.company) and
                             (SessionItems.location eq item.location)
                         }.singleOrNull()
 
-                        if (existsItem == null) {
-                            SessionItems.insert { row ->
-                                row[SessionItems.id] = UUID.randomUUID()
-                                row[SessionItems.sessionId] = sessionId
-                                row[SessionItems.code] = item.code
-                                row[SessionItems.barcode] = item.barcode
-                                row[SessionItems.sku] = item.sku
-                                row[SessionItems.location] = item.location
-                                row[SessionItems.company] = item.company
-                                row[SessionItems.quantity] = item.quantity
-                                row[SessionItems.idempotencyKey] = item.idempotencyKey
-                                row[SessionItems.createdAt] = now
-                                row[SessionItems.updatedAt] = now
+                        if (current == null) {
+                            SessionItems.insert { stmt ->
+                                stmt[SessionItems.id] = UUID.randomUUID()
+                                stmt[SessionItems.sessionId] = sessionId
+                                stmt[SessionItems.code] = item.code
+                                stmt[SessionItems.barcode] = item.barcode
+                                stmt[SessionItems.sku] = item.sku
+                                stmt[SessionItems.location] = item.location
+                                stmt[SessionItems.company] = item.company
+                                stmt[SessionItems.quantity] = item.quantity
+                                stmt[SessionItems.idempotencyKey] = item.idempotencyKey
+                                stmt[SessionItems.createdAt] = now
+                                stmt[SessionItems.updatedAt] = now
                             }
                         } else {
                             SessionItems.update({
@@ -83,23 +92,26 @@ fun Application.module() {
                                 (SessionItems.code eq item.code) and
                                 (SessionItems.company eq item.company) and
                                 (SessionItems.location eq item.location)
-                            }) { row ->
-                                row[SessionItems.quantity] = item.quantity
-                                row[SessionItems.barcode] = item.barcode
-                                row[SessionItems.sku] = item.sku
-                                row[SessionItems.updatedAt] = now
+                            }) { stmt ->
+                                stmt[SessionItems.quantity] = item.quantity
+                                stmt[SessionItems.barcode] = item.barcode
+                                stmt[SessionItems.sku] = item.sku
+                                stmt[SessionItems.updatedAt] = now
                             }
                         }
                     }
                 }
+
                 call.respond(mapOf("status" to "ok", "upserted" to req.items.size))
             }
 
+            // GET /v1/sessions/{id}
             get("/sessions/{id}") {
                 val sessionId = UUID.fromString(call.parameters["id"] ?: error("session id required"))
                 val dto = transaction {
                     val s = Sessions.select { Sessions.id eq sessionId }.singleOrNull()
                         ?: error("Session not found")
+
                     val items = SessionItems.select { SessionItems.sessionId eq sessionId }
                         .map { r ->
                             ItemResponse(
@@ -112,6 +124,7 @@ fun Application.module() {
                                 quantity = r[SessionItems.quantity]
                             )
                         }
+
                     SessionResponse(
                         id = s[Sessions.id],
                         name = s[Sessions.name],
